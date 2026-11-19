@@ -54,7 +54,9 @@ Putting the project in GitHub stores its code; GitHub alone does not run the app
 
 Use a demo deployment only until the app has individual staff accounts, a central PostgreSQL database, and verified farmer sign-in. The local SQLite database is not a shared, durable database for society operations.
 
-After recording a delivery or issuing an agrochemical loan, use the **Download / print ... receipt (PDF)** button to save an A5 receipt and print it. The agrochemical page has **Add sample coffee agrochemical catalogue** for liquid, powder, wettable-powder, granule, and biological product examples. Sample catalogue entries do not add stock; record a supplier receipt before issuing a loan. Verify current registration and crop label with PCPB and the product supplier.
+After recording a delivery or issuing an agrochemical loan, use the **Download / print ... receipt (PDF)** button to save an A5 receipt and print it. Farmers can book agrochemicals at the catalogue price. A booking reserves the requested quantity immediately; the office can approve or reject it, and reserved stock cannot be issued to another farmer. The reservation is released if the request is rejected and is converted to issued stock when the office records collection. Farmers see availability, not exact store balances.
+
+The agrochemical page can load a sample catalogue and fictional demo stock for a walkthrough. These quantities are not real inventory; replace them with a physical stock count before using the app for society operations. Product images are illustrations until the society adds photos of its actual stock. Verify current registration and crop label with PCPB and the product supplier.
 
 ## Pilot notes
 

@@ -320,8 +320,18 @@ def record_agrochemical_transaction(transacted_at: str, transaction_type: str,
                 "WHEN transaction_type='LOAN' THEN -quantity ELSE 0 END), 0) "
                 "FROM agrochemical_transactions WHERE product_id=?", (product_id,)
             ).fetchone()[0]
-            if quantity > float(product_balance):
-                raise ValueError(f"Only {float(product_balance):,.2f} units are in stock.")
+            reserved_query = (
+                "SELECT COALESCE(SUM(requested_quantity), 0) FROM agrochemical_loan_requests "
+                "WHERE product_id=? AND status IN ('PENDING', 'APPROVED')"
+            )
+            reserved_params: tuple = (product_id,)
+            if loan_request_id is not None:
+                reserved_query += " AND id<>?"
+                reserved_params = (product_id, loan_request_id)
+            reserved = float(conn.execute(reserved_query, reserved_params).fetchone()[0])
+            unreserved = float(product_balance) - reserved
+            if quantity > unreserved:
+                raise ValueError(f"Only {max(0, unreserved):,.2f} units are unreserved. Other farmer bookings are protected.")
             amount_kes = quantity * unit_price_kes
         elif transaction_type == "REPAYMENT":
             if farmer_id is None or amount_kes <= 0:
@@ -364,17 +374,18 @@ def create_agrochemical_loan_request(farmer_id: int, product_id: int, quantity: 
         ).fetchone()[0]
         reserved = conn.execute(
             "SELECT COALESCE(SUM(requested_quantity), 0) FROM agrochemical_loan_requests "
-            "WHERE product_id=? AND status='APPROVED'", (product_id,)
+            "WHERE product_id=? AND status IN ('PENDING', 'APPROVED')", (product_id,)
         ).fetchone()[0]
         available = float(physical_balance) - float(reserved)
         if quantity <= 0 or quantity > available:
             raise ValueError(f"Requested quantity must be positive and no more than the {available:,.2f} unreserved units currently in store.")
         pending = conn.execute(
-            "SELECT 1 FROM agrochemical_loan_requests WHERE farmer_id=? AND product_id=? AND status='PENDING'",
+            "SELECT 1 FROM agrochemical_loan_requests WHERE farmer_id=? AND product_id=? "
+            "AND status IN ('PENDING', 'APPROVED')",
             (farmer_id, product_id),
         ).fetchone()
         if pending:
-            raise ValueError("You already have a pending request for this agrochemical.")
+            raise ValueError("You already have a booking for this agrochemical awaiting review or collection.")
         cursor = conn.execute(
             "INSERT INTO agrochemical_loan_requests (farmer_id, product_id, requested_quantity, farmer_notes) "
             "VALUES (?, ?, ?, ?)",
@@ -402,7 +413,8 @@ def decide_agrochemical_loan_request(request_id: int, decision: str, manager_not
             ).fetchone()[0]
             reserved = conn.execute(
                 "SELECT COALESCE(SUM(requested_quantity), 0) FROM agrochemical_loan_requests "
-                "WHERE product_id=? AND status='APPROVED'", (request["product_id"],)
+                "WHERE product_id=? AND status IN ('PENDING', 'APPROVED') AND id<>?",
+                (request["product_id"], request_id),
             ).fetchone()[0]
             available = float(physical_balance) - float(reserved)
             if float(request["requested_quantity"]) > available:
@@ -649,3 +661,4 @@ def record_delivery(farmer_id: int, delivery_date: date, weighed_time: time,
             if "UNIQUE" in str(exc):
                 raise ValueError("This farmer already has a delivery recorded for that day.") from exc
             raise
+

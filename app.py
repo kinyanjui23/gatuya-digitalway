@@ -42,7 +42,7 @@ def agrochemical_catalogue_cards(products: pd.DataFrame, show_availability: bool
     if products.empty:
         st.info("No active agrochemicals are listed yet.")
         return
-    st.caption("Package photos are illustrations for this prototype. Replace them with photos of the actual store items when available.")
+    st.caption("Illustrative package photos")
     for start in range(0, len(products), 3):
         columns = st.columns(3)
         for column, (_, product) in zip(columns, products.iloc[start:start + 3].iterrows()):
@@ -418,14 +418,19 @@ def farmer_dashboard() -> None:
                 "FROM agrochemical_transactions t LEFT JOIN agrochemical_products a ON a.id=t.product_id "
                 "WHERE t.farmer_id=? ORDER BY t.transacted_at DESC", (farmer_id,)
             )
-            st.dataframe(loan_rows, use_container_width=True, hide_index=True)
+            with st.expander("Loan and repayment statement"):
+                if loan_rows.empty:
+                    st.info("No issued loans or repayments yet.")
+                else:
+                    st.dataframe(loan_rows, use_container_width=True, hide_index=True)
             st.subheader("Agrochemicals available from the society store")
+            st.caption("Book a quantity to reserve it. The office must approve it before collection.")
             available = query_df(
                 "SELECT p.id, p.name, p.product_type, p.formulation, p.unit, p.registration_reference, "
                 "p.price_per_unit_kes, COALESCE(SUM(CASE WHEN t.transaction_type='RECEIPT' THEN t.quantity "
                 "WHEN t.transaction_type='LOAN' THEN -t.quantity ELSE 0 END), 0) - "
                 "(SELECT COALESCE(SUM(r.requested_quantity), 0) FROM agrochemical_loan_requests r "
-                "WHERE r.product_id=p.id AND r.status='APPROVED') AS available "
+                "WHERE r.product_id=p.id AND r.status IN ('PENDING', 'APPROVED')) AS available "
                 "FROM agrochemical_products p LEFT JOIN agrochemical_transactions t ON t.product_id=p.id "
                 "WHERE p.active=1 GROUP BY p.id ORDER BY p.name"
             )
@@ -440,31 +445,39 @@ def farmer_dashboard() -> None:
                     }
                     for r in available_products.itertuples()
                 }
-                selected_product = st.selectbox("Choose an agrochemical to request", list(product_options), key="farmer_loan_product")
+                selected_product = st.selectbox("Choose an agrochemical to book", list(product_options), key="farmer_loan_product")
                 selected = product_options[selected_product]
                 with st.form("farmer_loan_request_form", clear_on_submit=True):
                     requested_qty = st.number_input(
-                        f"Quantity requested ({selected['unit']})", min_value=0.01,
+                        f"Quantity to book ({selected['unit']})", min_value=0.01,
                         max_value=selected["available"], step=min(1.0, selected["available"]),
                     )
-                    farmer_notes = st.text_input("Optional note for the office").strip() or None
-                    request_submit = st.form_submit_button("Apply for agrochemical loan", type="primary")
+                    farmer_notes = st.text_input("Note for the office (optional)").strip() or None
+                    request_submit = st.form_submit_button("Book and reserve stock", type="primary")
                 if request_submit:
                     try:
                         request_id = create_agrochemical_loan_request(
                             farmer_id, selected["id"], requested_qty, farmer_notes)
-                        st.success(f"Request #{request_id} sent to the society office. It is pending review; this does not issue the product yet.")
+                        st.success(f"Booking #{request_id} saved. Your quantity is reserved while the office reviews it.")
                     except ValueError as exc:
                         st.error(str(exc))
-            st.subheader("Your agrochemical loan requests")
+            st.subheader("Your bookings")
             requests = query_df(
-                "SELECT r.id AS 'Request #', r.requested_at AS 'Requested at', p.name AS Agrochemical, "
-                "r.requested_quantity AS Quantity, p.unit AS Unit, r.status AS Status, "
-                "r.manager_notes AS 'Office response', r.issued_transaction_id AS 'Issue transaction' "
+                "SELECT p.name AS Agrochemical, r.requested_quantity AS Quantity, p.unit AS Unit, r.status "
                 "FROM agrochemical_loan_requests r JOIN agrochemical_products p ON p.id=r.product_id "
                 "WHERE r.farmer_id=? ORDER BY r.requested_at DESC", (farmer_id,)
             )
-            st.dataframe(requests, use_container_width=True, hide_index=True)
+            if requests.empty:
+                st.caption("No bookings yet.")
+            else:
+                status_labels = {
+                    "PENDING": "Booked — awaiting review",
+                    "APPROVED": "Approved — ready for collection",
+                    "REJECTED": "Declined",
+                    "ISSUED": "Collected",
+                }
+                requests["Booking status"] = requests["status"].map(status_labels).fillna(requests["status"])
+                st.dataframe(requests.drop(columns="status"), use_container_width=True, hide_index=True)
     with notice_tab:
         notices = query_df(
             "SELECT title AS Meeting, meeting_at AS 'Date and time', location AS Location, message AS Details "
@@ -1118,3 +1131,4 @@ elif require_admin():
         - Forecasting after enough reliable season history exists.
         """)
         st.info("Delivery history can be filtered by dates and grouped by week, month or year. Existing records can be migrated after we know their file format.")
+
