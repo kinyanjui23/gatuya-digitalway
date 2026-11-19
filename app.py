@@ -14,8 +14,8 @@ from database import (correct_delivery, find_farmer, initialize, query_df,
                       save_feedback, save_meeting, update_farmer_phone,
                       save_message_campaign, save_agrochemical_product,
                       record_agrochemical_transaction, create_agrochemical_loan_request,
-                      decide_agrochemical_loan_request, seed_common_agrochemicals,
-                      seed_demo_agrochemical_stock,
+                      decide_agrochemical_loan_request, seed_demo_agrochemical_stock,
+                      seed_demo_agrochemical_loans,
                       seed_demo_data, seed_demo_labor)
 from sms_gateway import normalize_kenyan_phone, send_africas_talking_sms
 from receipts import create_receipt_pdf
@@ -57,8 +57,11 @@ def agrochemical_catalogue_cards(products: pd.DataFrame, show_availability: bool
                     details += f" · KES {float(price):,.2f} per {product.get('unit', 'unit')}"
                 st.caption(details)
                 if show_availability:
-                    available = float(product.get("available", 0)) > 0
-                    st.success("Available") if available else st.info("Out of stock")
+                    is_available = float(product.get("available", 0)) > 0
+                    if is_available:
+                        st.success("Available")
+                    else:
+                        st.info("Out of stock")
 
 
 @st.cache_data
@@ -766,6 +769,14 @@ def agrochemicals_loans() -> None:
         added, stocked = seed_demo_agrochemical_stock()
         st.success(f"Added {added} catalogue items and loaded demo stock for {stocked} items. This stock is fictional; replace it with a physical count before real use.")
         st.rerun()
+    if st.button("Load fictional farmer agrochemical loans"):
+        try:
+            created = seed_demo_agrochemical_loans()
+            st.success(f"Created {created} fictional loan and repayment records for DEMO-1001 to DEMO-1003.")
+            st.info("Farmer portal examples: share DEMO-1001 / phone DEMO-PHONE-0001, DEMO-1002 / DEMO-PHONE-0002, or DEMO-1003 / DEMO-PHONE-0003.")
+            st.rerun()
+        except ValueError as exc:
+            st.error(str(exc))
     products = query_df(
         "SELECT id, name, product_type, formulation, unit, price_per_unit_kes, registration_reference "
         "FROM agrochemical_products WHERE active=1 ORDER BY name"

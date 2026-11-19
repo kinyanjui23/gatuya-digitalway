@@ -260,6 +260,11 @@ def seed_demo_agrochemical_stock() -> tuple[int, int]:
     from datetime import datetime
 
     added_products = seed_common_agrochemicals()
+    demo_prices = {
+        "Demo coffee foliar feed": 400.0,
+        "Demo NPK coffee fertilizer": 120.0,
+        "Demo micronutrient blend": 350.0,
+    }
     starter_products = (
         ("COPABELT 50 WP", 20), ("ALTO 100 SL", 12), ("CABRIO EC", 8),
         ("XENTARI", 15), ("Demo coffee foliar feed", 25),
@@ -268,6 +273,12 @@ def seed_demo_agrochemical_stock() -> tuple[int, int]:
     )
     stocked_products = 0
     with connect() as conn:
+        for name, price in demo_prices.items():
+            conn.execute(
+                "UPDATE agrochemical_products SET price_per_unit_kes=? "
+                "WHERE name=? AND price_per_unit_kes=0",
+                (price, name),
+            )
         for name, quantity in starter_products:
             product = conn.execute(
                 "SELECT id FROM agrochemical_products WHERE name=? AND active=1", (name,)
@@ -289,6 +300,71 @@ def seed_demo_agrochemical_stock() -> tuple[int, int]:
             )
             stocked_products += 1
     return added_products, stocked_products
+
+
+def seed_demo_agrochemical_loans() -> int:
+    """Create fictional farmer accounts and sample loans for a portal walkthrough."""
+    from datetime import datetime
+
+    seed_demo_agrochemical_stock()
+    demo_farmers = [
+        ("DEMO-1001", "Demo Farmer 01", "DEMO-ID-0001", "DEMO-ACCT-0001", "DEMO-PHONE-0001", "Demo Zone A"),
+        ("DEMO-1002", "Demo Farmer 02", "DEMO-ID-0002", "DEMO-ACCT-0002", "DEMO-PHONE-0002", "Demo Zone B"),
+        ("DEMO-1003", "Demo Farmer 03", "DEMO-ID-0003", "DEMO-ACCT-0003", "DEMO-PHONE-0003", "Demo Zone C"),
+    ]
+    with connect() as conn:
+        for farmer in demo_farmers:
+            conn.execute(
+                "INSERT OR IGNORE INTO farmers "
+                "(share_number, name, national_id, account_number, phone_number, zone) "
+                "VALUES (?, ?, ?, ?, ?, ?)", farmer,
+            )
+        for share_number, name, *_ in demo_farmers:
+            existing = conn.execute(
+                "SELECT name FROM farmers WHERE share_number=?", (share_number,)
+            ).fetchone()
+            if existing is None or existing["name"] != name:
+                raise ValueError(f"Share number {share_number} is already used by a non-demo farmer.")
+
+    sample_loans = [
+        ("DEMO-1001", "Demo coffee foliar feed", 2.0, "DEMO-LOAN-1001"),
+        ("DEMO-1002", "Demo NPK coffee fertilizer", 10.0, "DEMO-LOAN-1002"),
+        ("DEMO-1003", "Demo micronutrient blend", 1.0, "DEMO-LOAN-1003"),
+    ]
+    created = 0
+    for share_number, product_name, quantity, reference in sample_loans:
+        if query_df(
+            "SELECT 1 FROM agrochemical_transactions WHERE reference=?", (reference,)
+        ).shape[0]:
+            continue
+        farmer_id = int(query_df(
+            "SELECT id FROM farmers WHERE share_number=?", (share_number,)
+        ).iloc[0]["id"])
+        product = query_df(
+            "SELECT id, price_per_unit_kes FROM agrochemical_products WHERE name=?", (product_name,)
+        )
+        if product.empty:
+            raise ValueError(f"Demo product {product_name} is missing from the catalogue.")
+        price = float(product.iloc[0]["price_per_unit_kes"])
+        record_agrochemical_transaction(
+            datetime.now().isoformat(sep=" ", timespec="seconds"), "LOAN",
+            int(product.iloc[0]["id"]), farmer_id, quantity, price, 0,
+            reference, "Fictional demo loan; not a real farmer balance.",
+        )
+        created += 1
+    if not query_df(
+        "SELECT 1 FROM agrochemical_transactions WHERE reference='DEMO-REPAY-1001'"
+    ).shape[0]:
+        farmer_id = int(query_df(
+            "SELECT id FROM farmers WHERE share_number='DEMO-1001'"
+        ).iloc[0]["id"])
+        record_agrochemical_transaction(
+            datetime.now().isoformat(sep=" ", timespec="seconds"), "REPAYMENT",
+            None, farmer_id, 0, 0, 200, "DEMO-REPAY-1001",
+            "Fictional demo repayment; not a real payment.",
+        )
+        created += 1
+    return created
 
 
 def record_agrochemical_transaction(transacted_at: str, transaction_type: str,

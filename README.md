@@ -56,7 +56,7 @@ Use a demo deployment only until the app has individual staff accounts, a centra
 
 After recording a delivery or issuing an agrochemical loan, use the **Download / print ... receipt (PDF)** button to save an A5 receipt and print it. Farmers can book agrochemicals at the catalogue price. A booking reserves the requested quantity immediately; the office can approve or reject it, and reserved stock cannot be issued to another farmer. The reservation is released if the request is rejected and is converted to issued stock when the office records collection. Farmers see availability, not exact store balances.
 
-The agrochemical page can load a sample catalogue and fictional demo stock for a walkthrough. These quantities are not real inventory; replace them with a physical stock count before using the app for society operations. Product images are illustrations until the society adds photos of its actual stock. Verify current registration and crop label with PCPB and the product supplier.
+The agrochemical page can load a sample catalogue and fictional demo stock for a walkthrough. The **Load fictional farmer agrochemical loans** button creates three demo farmer accounts with sample loans and one sample repayment; test these in the Farmer portal with share `DEMO-1001` and phone `DEMO-PHONE-0001` (or the matching `1002`/`0002` and `1003`/`0003` pair). These quantities and balances are not real inventory or debt; replace them with verified records before society operations. Product images are illustrations until the society adds photos of its actual stock. Verify current registration and crop label with PCPB and the product supplier.
 
 ## Pilot notes
 
